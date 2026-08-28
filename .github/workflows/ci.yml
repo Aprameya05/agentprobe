@@ -7,9 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Import check -- catches missing modules, broken imports, syntax errors
-  # ---------------------------------------------------------------------------
   lint:
     name: Import check
     runs-on: ubuntu-latest
@@ -33,10 +30,6 @@ jobs:
           print('All imports OK')
           "
 
-  # ---------------------------------------------------------------------------
-  # Dependency vulnerability scan (pip-audit, free, open source)
-  # Fails the build if any CRITICAL or HIGH CVEs are found in locked deps.
-  # ---------------------------------------------------------------------------
   security-scan:
     name: Dependency vulnerability scan
     runs-on: ubuntu-latest
@@ -56,9 +49,6 @@ jobs:
             --strict \
             || echo "::warning::Vulnerabilities found -- review before shipping"
 
-  # ---------------------------------------------------------------------------
-  # Dashboard build check
-  # ---------------------------------------------------------------------------
   dashboard:
     name: Dashboard build
     runs-on: ubuntu-latest
@@ -69,9 +59,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install
-        run: npm ci
+        run: npm install --legacy-peer-deps
       - name: Type check
         run: npx tsc --noEmit --skipLibCheck || true
       - name: Build
