@@ -20,8 +20,9 @@ from groq import AsyncGroq
 
 _groq = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
-PRIMARY_MODEL = "llama-3.3-70b-versatile"
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+PRIMARY_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
+FALLBACK_MODEL = "llama-3.1-70b-versatile"
+FAST_MODEL = "llama-3.1-8b-instant"
 
 SYSTEM_PROMPT = """You are an AI agent browsing a website. Complete the assigned task efficiently.
 
@@ -75,7 +76,7 @@ Page state:
 
 Decide the next action (respond with JSON only):"""
 
-    for model in [PRIMARY_MODEL, FALLBACK_MODEL]:
+    for model in [PRIMARY_MODEL, FALLBACK_MODEL, FAST_MODEL]:
         try:
             resp = await _groq.chat.completions.create(
                 model=model,
@@ -85,14 +86,14 @@ Decide the next action (respond with JSON only):"""
                 ],
                 max_tokens=350,
                 temperature=0.1,
-                response_format={"type": "json_object"},  # Groq supports this
+                response_format={"type": "json_object"},
             )
             text = resp.choices[0].message.content.strip()
             return _parse_response(text)
         except Exception as e:
             err = str(e)
-            if "rate_limit" in err.lower() and model == PRIMARY_MODEL:
-                continue  # try fallback
+            if any(x in err.lower() for x in ["rate_limit", "model_not_found", "404", "does not exist"]):
+                continue  # try next model
             return _error_decision(err)
 
     return _error_decision("All models failed")
