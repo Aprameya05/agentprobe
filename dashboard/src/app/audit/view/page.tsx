@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -52,8 +51,8 @@ function ActionBadge({ action }: { action: string }) {
 }
 
 export default function AuditLivePage() {
-  const { id } = useParams<{ id: string }>();
-  const router = useRouter();
+  // Read audit ID from URL path: /audit/<id>
+  const [id, setId] = useState<string>("");
   const [events, setEvents] = useState<Event[]>([]);
   const [status, setStatus] = useState<"running" | "completed" | "failed">("running");
   const [parseScore, setParseScore] = useState<number | null>(null);
@@ -62,8 +61,15 @@ export default function AuditLivePage() {
   const feedRef = useRef<HTMLDivElement>(null);
   const lastIdRef = useRef(0);
 
-  // Poll for events (SSE with fetch-based polling for Cloudflare Pages compat)
   useEffect(() => {
+    // Extract ID from path like /audit/aud_abc123
+    const parts = window.location.pathname.replace(/\/$/, "").split("/");
+    setId(parts[parts.length - 1]);
+  }, []);
+
+  // Poll for events
+  useEffect(() => {
+    if (!id) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
 
@@ -78,12 +84,11 @@ export default function AuditLivePage() {
           setStatus(data.status);
           if (data.report) {
             setReport(data.report);
-            router.push(`/report/${id}`);
+            window.location.href = `/report/${id}`;
             return;
           }
         }
 
-        // Fetch new events
         const evResp = await fetch(
           `${API}/audit/${id}/events-poll?after=${lastIdRef.current}`
         );
@@ -106,7 +111,7 @@ export default function AuditLivePage() {
               if (ev.event_type === "audit_done" && ev.report) {
                 setReport(ev.report);
                 setStatus("completed");
-                setTimeout(() => router.push(`/report/${id}`), 1200);
+                setTimeout(() => { window.location.href = `/report/${id}`; }, 1200);
               }
             }
           }
@@ -122,7 +127,7 @@ export default function AuditLivePage() {
 
     poll();
     return () => { stopped = true; clearTimeout(timer); };
-  }, [id, router]);
+  }, [id]);
 
   // Auto-scroll feed
   useEffect(() => {
@@ -135,7 +140,6 @@ export default function AuditLivePage() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0f]">
-      {/* Nav */}
       <nav className="border-b border-[#1e1e2e] px-6 py-4 flex items-center gap-4">
         <a href="/" className="font-mono text-indigo-400 font-bold text-lg">AgentProbe</a>
         <span className="text-gray-600">/</span>
@@ -149,7 +153,6 @@ export default function AuditLivePage() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
-        {/* Parseability quick score */}
         {parseScore !== null && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -173,7 +176,6 @@ export default function AuditLivePage() {
           </motion.div>
         )}
 
-        {/* Task status pills */}
         {Object.keys(taskStatuses).length > 0 && (
           <div className="flex flex-wrap gap-2">
             {Object.entries(taskStatuses).map(([name, st]) => (
@@ -193,7 +195,6 @@ export default function AuditLivePage() {
           </div>
         )}
 
-        {/* Live event feed */}
         <div className="bg-[#111118] border border-[#1e1e2e] rounded-xl overflow-hidden">
           <div className="border-b border-[#1e1e2e] px-5 py-3 flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
@@ -285,4 +286,3 @@ export default function AuditLivePage() {
     </main>
   );
 }
-

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   RadarChart,
@@ -35,7 +34,6 @@ function DimBar({ label, score, baseline }: { label: string; score: number; base
         </div>
       </div>
       <div className="relative h-2 bg-[#1e1e2e] rounded-full overflow-hidden">
-        {/* Baseline marker */}
         <div
           className="absolute top-0 h-full w-0.5 bg-gray-600 z-10"
           style={{ left: `${baseline}%` }}
@@ -111,11 +109,18 @@ function TaskCard({ task }: { task: any }) {
 }
 
 export default function ReportPage() {
-  const { id } = useParams<{ id: string }>();
+  // Read audit ID from URL path: /report/<id>
+  const [id, setId] = useState<string>("");
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const parts = window.location.pathname.replace(/\/$/, "").split("/");
+    setId(parts[parts.length - 1]);
+  }, []);
+
+  useEffect(() => {
+    if (!id) return;
     fetch(`${API}/audit/${id}`)
       .then(r => r.json())
       .then(data => {
@@ -174,13 +179,11 @@ export default function ReportPage() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-        {/* ARS hero */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-[#111118] border border-[#1e1e2e] rounded-2xl p-8 flex flex-col sm:flex-row items-center gap-8"
         >
-          {/* Big grade */}
           <div className="text-center">
             <div
               className="text-8xl font-black"
@@ -192,7 +195,6 @@ export default function ReportPage() {
             <div className="text-xs text-gray-500 font-mono mt-1">/ 100 ARS</div>
           </div>
 
-          {/* Radar chart */}
           <div className="flex-1 w-full" style={{ height: 240 }}>
             <ResponsiveContainer>
               <RadarChart data={radarData} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
@@ -205,7 +207,6 @@ export default function ReportPage() {
             </ResponsiveContainer>
           </div>
 
-          {/* Stats */}
           <div className="text-right space-y-3 min-w-[120px]">
             <div>
               <p className="text-xs text-gray-600 font-mono">Total steps</p>
@@ -224,7 +225,6 @@ export default function ReportPage() {
           </div>
         </motion.div>
 
-        {/* Dimension bars */}
         <div className="bg-[#111118] border border-[#1e1e2e] rounded-xl p-6 space-y-4">
           <h2 className="text-sm font-mono text-gray-400 mb-5">Score breakdown <span className="text-gray-600">-- gray line = industry average</span></h2>
           {dims.map(d => (
@@ -237,7 +237,6 @@ export default function ReportPage() {
           ))}
         </div>
 
-        {/* Recommendations */}
         {report.recommendations?.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-sm font-mono text-gray-400">What to fix</h2>
@@ -277,7 +276,6 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* Task results */}
         <div className="space-y-3">
           <h2 className="text-sm font-mono text-gray-400">Task results</h2>
           {(report.tasks ?? []).map((task: any, i: number) => (
@@ -285,7 +283,6 @@ export default function ReportPage() {
           ))}
         </div>
 
-        {/* Parseability signals */}
         {report.parseability?.signals && (
           <div className="bg-[#111118] border border-[#1e1e2e] rounded-xl p-6">
             <h2 className="text-sm font-mono text-gray-400 mb-4">Static parseability signals</h2>
@@ -304,17 +301,16 @@ export default function ReportPage() {
           </div>
         )}
 
-        {/* Share / compare */}
         <div className="flex flex-wrap gap-3">
           <a
-            href={`/leaderboard`}
+            href="/leaderboard"
             className="px-4 py-2 bg-[#111118] border border-[#1e1e2e] rounded-lg text-sm text-gray-300 hover:border-indigo-500 hover:text-white transition-all font-mono"
           >
             View leaderboard
           </a>
           <button
             onClick={() => {
-              const u = `${window.location.origin}/report/${id}`;
+              const u = window.location.href;
               navigator.clipboard.writeText(u);
             }}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white transition-all font-semibold"
@@ -326,4 +322,3 @@ export default function ReportPage() {
     </main>
   );
 }
-
