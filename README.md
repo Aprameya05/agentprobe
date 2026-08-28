@@ -313,9 +313,10 @@ agentprobe/
 +-- dashboard/               Next.js 14, App Router, Tailwind, Recharts, Framer Motion
 |   +-- src/app/
 |   |   +-- page.tsx         Landing page + URL input + task selector
-|   |   +-- audit/[id]/      Live audit view with SSE event feed
-|   |   +-- report/[id]/     Scored report: radar chart, dim bars, recommendations, task drill-down
+|   |   +-- audit/view/      Live audit view -- reads ID from URL, polls event feed
+|   |   +-- report/view/     Scored report: radar chart, dim bars, recommendations, task drill-down
 |   |   +-- leaderboard/     Public ARS leaderboard with industry baseline overlay
+|   +-- public/_redirects    Cloudflare rewrite rules for /audit/* and /report/*
 |   +-- next.config.js       Static export for Cloudflare Pages
 |
 +-- worker/
@@ -385,13 +386,5 @@ API_BASE_URL=https://agentprobe-api.onrender.com
 ```
 
 ---
-
-## Author
-
-Built by [Aprameya](https://github.com/Aprameya05) -- CS + Design student at DSCE Bengaluru,
-AI infrastructure engineer.
-
-GitHub &nbsp;|&nbsp; [neuralops](https://github.com/Aprameya05/neuralops) &nbsp;|&nbsp;
-[Live demo](https://agentprobe.pages.dev)
 
 Apache 2.0 -- built in public -- PRs welcome

@@ -504,12 +504,6 @@ export default function HomePage() {
             <a href="/leaderboard" className="hover:text-white transition-colors">
               Leaderboard
             </a>
-            <span>
-              built by{" "}
-              <a href="https://github.com/Aprameya05" className="text-indigo-400 hover:text-indigo-300">
-                Aprameya
-              </a>
-            </span>
           </div>
         </div>
       </footer>
