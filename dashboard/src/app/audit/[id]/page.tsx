@@ -286,4 +286,3 @@ export default function AuditLivePage() {
   );
 }
 
-export function generateStaticParams() { return []; }

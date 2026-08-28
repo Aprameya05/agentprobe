@@ -327,4 +327,3 @@ export default function ReportPage() {
   );
 }
 
-export function generateStaticParams() { return []; }
