@@ -1,0 +1,39 @@
+version: "3.9"
+
+# Full local stack for development.
+# Requires .env file (copy from .env.example).
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - WORKER_SECRET=${WORKER_SECRET:-dev-secret}
+      - API_BASE_URL=http://localhost:8000
+    volumes:
+      - ./api:/app/api:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  dashboard:
+    image: node:20-slim
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dashboard:/app
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api

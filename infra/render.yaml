@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: agentprobe-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # set in Render dashboard
+      - key: GROQ_API_KEY
+        sync: false
+      - key: WORKER_SECRET
+        generateValue: true
+      - key: GITHUB_PAT
+        sync: false
+      - key: GITHUB_OWNER
+        value: Aprameya05
+      - key: GITHUB_REPO
+        value: agentprobe
+      - key: API_BASE_URL
+        fromService:
+          type: web
+          name: agentprobe-api
+          property: host
+    healthCheckPath: /health

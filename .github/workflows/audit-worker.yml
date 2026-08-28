@@ -1,0 +1,111 @@
+name: Audit Worker
+
+# Triggered by the AgentProbe API via workflow_dispatch.
+# Runs one full audit -- all tasks in parallel via matrix strategy.
+# Each job POSTs its step events back to the API.
+# The final aggregation job POSTs the completed report.
+
+on:
+  workflow_dispatch:
+    inputs:
+      audit_id:
+        description: "Audit ID (aud_...)"
+        required: true
+      url:
+        description: "Target URL to audit"
+        required: true
+      tasks:
+        description: "Comma-separated task names"
+        required: true
+        default: "PRICING_DISCOVERY,CHECKOUT_INITIATION,CONTACT_EXTRACTION,DEMO_BOOKING,POLICY_RETRIEVAL,SUPPORT_ROUTING,API_DISCOVERY"
+      api_url:
+        description: "AgentProbe API base URL"
+        required: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Parseability (fast static analysis, starts immediately)
+  # -------------------------------------------------------------------------
+  parseability:
+    name: Parseability analysis
+    runs-on: ubuntu-latest
+    outputs:
+      score: ${{ steps.analyze.outputs.score }}
+      result: ${{ steps.analyze.outputs.result }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install playwright beautifulsoup4 lxml httpx
+      - run: playwright install --with-deps chromium
+
+      - name: Run parseability analysis
+        id: analyze
+        env:
+          AUDIT_ID:  ${{ inputs.audit_id }}
+          TARGET_URL: ${{ inputs.url }}
+          API_URL:   ${{ inputs.api_url }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          python worker/run_parseability.py
+
+  # -------------------------------------------------------------------------
+  # Task matrix -- runs all tasks in parallel
+  # -------------------------------------------------------------------------
+  task:
+    name: Task -- ${{ matrix.task }}
+    runs-on: ubuntu-latest
+    needs: []    # Does NOT wait for parseability -- they run in parallel
+    strategy:
+      fail-fast: false
+      matrix:
+        task: ["PRICING_DISCOVERY","CHECKOUT_INITIATION","CONTACT_EXTRACTION","DEMO_BOOKING","POLICY_RETRIEVAL","SUPPORT_ROUTING","API_DISCOVERY"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install playwright groq httpx pydantic
+      - run: playwright install --with-deps chromium
+
+      - name: Run task
+        env:
+          AUDIT_ID:    ${{ inputs.audit_id }}
+          TARGET_URL:  ${{ inputs.url }}
+          TASK_NAME:   ${{ matrix.task }}
+          API_URL:     ${{ inputs.api_url }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+          GROQ_API_KEY:  ${{ secrets.GROQ_API_KEY }}
+        run: |
+          python worker/run_task.py
+
+  # -------------------------------------------------------------------------
+  # Aggregation -- waits for all tasks, computes final ARS
+  # -------------------------------------------------------------------------
+  aggregate:
+    name: Aggregate results
+    runs-on: ubuntu-latest
+    needs: [parseability, task]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install httpx pydantic
+
+      - name: Compute ARS and post report
+        env:
+          AUDIT_ID:     ${{ inputs.audit_id }}
+          TARGET_URL:   ${{ inputs.url }}
+          API_URL:      ${{ inputs.api_url }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          python worker/aggregate.py

@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand: #6366f1;
+  --brand-dim: #4f46e5;
+  --surface: #111118;
+  --surface-2: #17171f;
+  --border: #1e1e2e;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  ::selection { background: #6366f140; }
+
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-slide-up { animation: slide-up 0.3s ease forwards; }
+.animate-fade-in  { animation: fade-in 0.4s ease forwards; }
+
+/* Grade colors */
+.grade-ap { color: #10b981; }
+.grade-a  { color: #34d399; }
+.grade-b  { color: #60a5fa; }
+.grade-c  { color: #fbbf24; }
+.grade-d  { color: #f97316; }
+.grade-f  { color: #ef4444; }
