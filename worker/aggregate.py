@@ -38,6 +38,7 @@ async def main() -> None:
     # Reconstruct task results from task_done events
     task_results: list[TaskResult] = []
     parseability_score: float = 50.0
+    parseability_signals: list = []
 
     for ev in events:
         if ev.get("event_type") == "task_done" and ev.get("task_result"):
@@ -49,6 +50,7 @@ async def main() -> None:
                 print(f"[aggregate] failed to parse task_result: {e}", file=sys.stderr)
         elif ev.get("event_type") == "parseability_done":
             parseability_score = float(ev.get("score", 50.0))
+            parseability_signals = ev.get("signals", [])
 
     if not task_results:
         print("[aggregate] no task results found in events -- marking audit failed")
@@ -72,6 +74,7 @@ async def main() -> None:
         "total_steps": sum(t.steps_taken for t in task_results),
         "total_duration_ms": sum(t.duration_ms for t in task_results),
         "parseability_score": parseability_score,
+        "parseability": {"score": parseability_score, "signals": parseability_signals},
     }
 
     async with httpx.AsyncClient(timeout=30, base_url=API_URL, headers=HEADERS) as client:

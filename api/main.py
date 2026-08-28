@@ -355,7 +355,7 @@ async def receive_fail(audit_id: str, body: dict):
 @app.post("/internal/audit/{audit_id}/parseability", dependencies=[Depends(verify_worker)])
 async def internal_parseability(audit_id: str, body: dict):
     await _broadcast(audit_id, {
-        "event_type": "parseability",
+        "event_type": "parseability_done",
         "score": body.get("score", 0),
         "signals": body.get("signals", []),
     })

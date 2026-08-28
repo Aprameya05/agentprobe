@@ -147,7 +147,7 @@ class BrowserSession:
                     '[class*="price"], [class*="cost"], [class*="plan"], [data-price]'
                 ))
                     .map(e => text(e))
-                    .filter(t => t && t.match(/[\$€£¥\d]/))
+                    .filter(t => t && t.match(/[$€£¥\d]/))
                     .slice(0, 8);
 
                 return {
