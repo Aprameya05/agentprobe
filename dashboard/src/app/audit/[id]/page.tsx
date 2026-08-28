@@ -285,3 +285,5 @@ export default function AuditLivePage() {
     </main>
   );
 }
+
+export function generateStaticParams() { return []; }

@@ -326,3 +326,5 @@ export default function ReportPage() {
     </main>
   );
 }
+
+export function generateStaticParams() { return []; }
