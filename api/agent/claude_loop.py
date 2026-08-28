@@ -2,8 +2,9 @@
 AgentProbe -- LLM decision loop (Groq, free tier)
 
 Model priority:
-  1. llama-3.3-70b-versatile  (best reasoning, free on Groq)
-  2. llama-3.1-8b-instant     (fallback if 70b rate-limited)
+  1. meta-llama/llama-4-maverick-17b-128e-instruct-fp8  (primary)
+  2. llama-3.1-8b-instant                               (fallback)
+  3. gemma2-9b-it                                       (last resort)
 
 Groq free tier: 14,400 requests/day, 6000 tokens/min per model.
 Each decision step uses ~400-600 tokens. Well within limits.
@@ -21,8 +22,8 @@ from groq import AsyncGroq
 _groq = AsyncGroq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
 PRIMARY_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct-fp8"
-FALLBACK_MODEL = "llama-3.1-70b-versatile"
-FAST_MODEL = "llama-3.1-8b-instant"
+FALLBACK_MODEL = "llama-3.1-8b-instant"
+FAST_MODEL = "gemma2-9b-it"
 
 SYSTEM_PROMPT = """You are an AI agent browsing a website. Complete the assigned task efficiently.
 
