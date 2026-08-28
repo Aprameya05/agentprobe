@@ -62,9 +62,15 @@ export default function AuditLivePage() {
   const lastIdRef = useRef(0);
 
   useEffect(() => {
-    // Extract ID from path like /audit/aud_abc123
-    const parts = window.location.pathname.replace(/\/$/, "").split("/");
-    setId(parts[parts.length - 1]);
+    // Try ?id= query param first (used by static export), then fall back to path segment
+    const params = new URLSearchParams(window.location.search);
+    const qid = params.get("id");
+    if (qid) {
+      setId(qid);
+    } else {
+      const parts = window.location.pathname.replace(/\/$/, "").split("/");
+      setId(parts[parts.length - 1]);
+    }
   }, []);
 
   // Poll for events
@@ -84,7 +90,7 @@ export default function AuditLivePage() {
           setStatus(data.status);
           if (data.report) {
             setReport(data.report);
-            window.location.href = `/report/${id}`;
+            window.location.href = `/report/view/?id=${id}`;
             return;
           }
         }
@@ -93,7 +99,8 @@ export default function AuditLivePage() {
           `${API}/audit/${id}/events-poll?after=${lastIdRef.current}`
         );
         if (evResp.ok) {
-          const newEvents: Event[] = await evResp.json();
+          const evData = await evResp.json();
+          const newEvents: Event[] = evData.events ?? evData ?? [];
           if (newEvents.length > 0) {
             lastIdRef.current = newEvents[newEvents.length - 1].id ?? lastIdRef.current;
             setEvents(prev => [...prev, ...newEvents]);
@@ -111,7 +118,7 @@ export default function AuditLivePage() {
               if (ev.event_type === "audit_done" && ev.report) {
                 setReport(ev.report);
                 setStatus("completed");
-                setTimeout(() => { window.location.href = `/report/${id}`; }, 1200);
+                setTimeout(() => { window.location.href = `/report/view/?id=${id}`; }, 1200);
               }
             }
           }
