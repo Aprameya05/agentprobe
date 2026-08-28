@@ -75,6 +75,7 @@ Page state:
 
 Decide the next action (respond with JSON only):"""
 
+    last_err = "unknown"
     for model in [PRIMARY_MODEL, FALLBACK_MODEL]:
         try:
             resp = await _groq.chat.completions.create(
@@ -91,11 +92,12 @@ Decide the next action (respond with JSON only):"""
             return _parse_response(text)
         except Exception as e:
             err = str(e)
-            if any(x in err.lower() for x in ["rate_limit", "model_not_found", "404", "does not exist", "decommissioned"]):
+            last_err = err
+            if any(x in err.lower() for x in ["rate_limit", "model_not_found", "404", "does not exist", "decommissioned", "invalid_api_key", "authentication"]):
                 continue  # try next model
             return _error_decision(err)
 
-    return _error_decision("All models failed")
+    return _error_decision(f"All models failed. Last error: {last_err}")
 
 
 def _parse_response(text: str) -> dict[str, Any]:
