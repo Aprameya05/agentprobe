@@ -75,26 +75,33 @@ Page state:
 
 Decide the next action (respond with JSON only):"""
 
+    import asyncio
     last_err = "unknown"
     for model in [PRIMARY_MODEL, FALLBACK_MODEL]:
-        try:
-            resp = await _groq.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_message},
-                ],
-                max_tokens=350,
-                temperature=0.1,
-            )
-            text = resp.choices[0].message.content.strip()
-            return _parse_response(text)
-        except Exception as e:
-            err = str(e)
-            last_err = err
-            if any(x in err.lower() for x in ["rate_limit", "model_not_found", "404", "does not exist", "decommissioned", "json_validate_failed", "invalid_api_key", "authentication"]):
-                continue  # try next model
-            return _error_decision(err)
+        for attempt in range(3):  # up to 3 retries per model on rate limit
+            try:
+                resp = await _groq.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_message},
+                    ],
+                    max_tokens=350,
+                    temperature=0.1,
+                )
+                text = resp.choices[0].message.content.strip()
+                return _parse_response(text)
+            except Exception as e:
+                err = str(e)
+                last_err = err
+                if "rate_limit" in err.lower():
+                    wait = 20 * (attempt + 1)  # 20s, 40s, 60s
+                    print(f"[llm] rate limited on {model}, waiting {wait}s (attempt {attempt+1}/3)")
+                    await asyncio.sleep(wait)
+                    continue  # retry same model
+                if any(x in err.lower() for x in ["model_not_found", "404", "does not exist", "decommissioned", "json_validate_failed"]):
+                    break  # skip to next model
+                return _error_decision(err)  # unrecoverable
 
     return _error_decision(f"All models failed. Last error: {last_err}")
 
