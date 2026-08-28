@@ -50,7 +50,7 @@ async def generate_fix_code(
             "Generate the exact code snippet to fix this issue."
         )
         resp = await client.chat.completions.create(
-            model="meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": _SYSTEM},
                 {"role": "user", "content": prompt},
