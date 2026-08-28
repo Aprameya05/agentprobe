@@ -258,26 +258,45 @@ function TaskCard({ task }: { task: any }) {
 }
 
 export default function ReportPage() {
-  // Read audit ID from URL path: /report/<id>
+  // Read audit ID from ?id= query param (URL is /report/view/?id=xxx)
   const [id, setId] = useState<string>("");
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [rerunning, setRerunning] = useState(false);
 
   useEffect(() => {
-    const parts = window.location.pathname.replace(/\/$/, "").split("/");
-    setId(parts[parts.length - 1]);
+    const params = new URLSearchParams(window.location.search);
+    const qid = params.get("id");
+    if (qid) {
+      setId(qid);
+    } else {
+      const parts = window.location.pathname.replace(/\/$/, "").split("/");
+      setId(parts[parts.length - 1]);
+    }
   }, []);
 
   useEffect(() => {
     if (!id) return;
-    fetch(`${API}/audit/${id}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.report) setReport(data.report);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const r = await fetch(`${API}/audit/${id}`);
+          const data = await r.json();
+          if (data.report) {
+            if (!cancelled) { setReport(data.report); setLoading(false); }
+            return;
+          }
+          if (data.status === "failed") {
+            if (!cancelled) setLoading(false);
+            return;
+          }
+        } catch {}
+        await new Promise(res => setTimeout(res, 3000));
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
   }, [id]);
 
   if (loading) {
