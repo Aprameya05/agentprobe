@@ -113,6 +113,7 @@ export default function ReportPage() {
   const [id, setId] = useState<string>("");
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [rerunning, setRerunning] = useState(false);
 
   useEffect(() => {
     const parts = window.location.pathname.replace(/\/$/, "").split("/");
@@ -313,9 +314,44 @@ export default function ReportPage() {
               const u = window.location.href;
               navigator.clipboard.writeText(u);
             }}
+            className="px-4 py-2 bg-[#111118] border border-[#1e1e2e] rounded-lg text-sm text-gray-300 hover:border-indigo-500 hover:text-white transition-all font-mono"
+          >
+            Copy link
+          </button>
+          <button
+            onClick={async () => {
+              if (!report?.url || rerunning) return;
+              setRerunning(true);
+              try {
+                const r = await fetch(`${API}/audit`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: report.url, tasks: report.tasks?.map((t: any) => t.task_name) }),
+                });
+                if (!r.ok) throw new Error("failed");
+                const { audit_id } = await r.json();
+                window.location.href = `/audit/view/?id=${audit_id}`;
+              } catch {
+                setRerunning(false);
+              }
+            }}
+            disabled={rerunning}
+            className="px-4 py-2 bg-[#111118] border border-[#1e1e2e] rounded-lg text-sm text-gray-300 hover:border-amber-500 hover:text-amber-300 transition-all font-mono disabled:opacity-40"
+          >
+            {rerunning ? "Starting..." : "↺ Re-run audit"}
+          </button>
+          <button
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `agentprobe-${id}.json`;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            }}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white transition-all font-semibold"
           >
-            Copy report link
+            Export JSON
           </button>
         </div>
       </div>

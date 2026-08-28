@@ -181,6 +181,28 @@ function AgentTerminal() {
   );
 }
 
+const GRADE_META: Record<string, { color: string }> = {
+  "A+": { color: "#10b981" }, "A":  { color: "#34d399" },
+  "B":  { color: "#60a5fa" }, "C":  { color: "#fbbf24" },
+  "D":  { color: "#f97316" }, "F":  { color: "#ef4444" },
+};
+
+function normalizeUrl(raw: string): string {
+  const t = raw.trim();
+  if (!t) return t;
+  if (/^https?:\/\//i.test(t)) return t;
+  return `https://${t}`;
+}
+
+function isValidUrl(raw: string): boolean {
+  try {
+    const u = new URL(normalizeUrl(raw));
+    return u.protocol === "https:" || u.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export default function HomePage() {
   const [url, setUrl]         = useState("");
   const [label, setLabel]     = useState("");
@@ -188,17 +210,29 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [showTasks, setShowTasks] = useState(false);
+  const [recentAudits, setRecentAudits] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/leaderboard?limit=6`)
+      .then(r => r.json())
+      .then(d => setRecentAudits(d.leaderboard ?? []))
+      .catch(() => {});
+  }, []);
 
   function toggleTask(id: string) {
     setTasks(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   }
 
   async function runAudit(targetUrl?: string) {
-    const u = (targetUrl ?? url).trim();
-    if (!u) return;
+    const raw = (targetUrl ?? url).trim();
+    if (!raw) return;
+    const u = normalizeUrl(raw);
+    if (!isValidUrl(u)) { setError("Enter a valid URL (e.g. https://example.com)"); return; }
     if (tasks.length === 0) { setError("Select at least one task."); return; }
     setError("");
     setLoading(true);
+    // Update the input to show the normalised URL
+    if (!targetUrl) setUrl(u);
     try {
       const r = await fetch(`${API}/audit`, {
         method: "POST",
@@ -207,7 +241,7 @@ export default function HomePage() {
       });
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       const { audit_id } = await r.json();
-      window.location.href = `/audit/${audit_id}`;
+      window.location.href = `/audit/view/?id=${audit_id}`;
     } catch (e: any) {
       setError(e.message);
       setLoading(false);
@@ -290,7 +324,7 @@ export default function HomePage() {
                   />
                   <button
                     onClick={() => runAudit()}
-                    disabled={loading || !url.trim()}
+                    disabled={loading || !url.trim() || (url.trim().length > 3 && !isValidUrl(url))}
                     className="absolute right-2 top-2 bottom-2 px-5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg font-bold text-sm text-white transition-all"
                   >
                     {loading ? (
@@ -485,6 +519,60 @@ export default function HomePage() {
           </motion.div>
         </div>
       </section>
+
+      {/* Recently audited */}
+      {recentAudits.length > 0 && (
+        <section className="relative z-10 py-20 px-6 border-t border-[#1e1e2e]/60">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-end justify-between mb-8">
+              <div>
+                <p className="text-xs font-mono text-indigo-400 uppercase tracking-widest mb-2">Recently audited</p>
+                <h2 className="text-2xl font-bold text-white">See how others score</h2>
+              </div>
+              <a href="/leaderboard" className="text-xs text-gray-500 hover:text-indigo-400 transition-colors font-mono">
+                Full leaderboard →
+              </a>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {recentAudits.slice(0, 6).map((item: any, i: number) => {
+                const meta = GRADE_META[item.grade] ?? { color: "#9ca3af" };
+                let hostname = item.url;
+                try { hostname = new URL(item.url).hostname; } catch {}
+                return (
+                  <motion.a
+                    key={item.audit_id}
+                    href={`/report/view/?id=${item.audit_id}`}
+                    initial={{ opacity: 0, y: 12 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.06 }}
+                    className="bg-[#111118] border border-[#1e1e2e] rounded-xl p-5 hover:border-indigo-500/40 hover:bg-[#14141f] transition-all group"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div
+                        className="text-2xl font-black px-2 py-0.5 rounded-lg"
+                        style={{ color: meta.color, background: `${meta.color}18` }}
+                      >
+                        {item.grade}
+                      </div>
+                      <span className="text-2xl font-black text-white">{(item.composite ?? 0).toFixed(0)}</span>
+                    </div>
+                    <p className="text-white text-sm font-semibold truncate group-hover:text-indigo-300 transition-colors">
+                      {item.label || hostname}
+                    </p>
+                    <p className="text-gray-600 text-xs font-mono truncate mt-0.5">{hostname}</p>
+                    <div className="flex gap-3 mt-3 text-[10px] font-mono text-gray-600">
+                      <span>D:{(item.discoverability ?? 0).toFixed(0)}</span>
+                      <span>P:{(item.parseability ?? 0).toFixed(0)}</span>
+                      <span>T:{(item.task_completion ?? 0).toFixed(0)}</span>
+                    </div>
+                  </motion.a>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-[#1e1e2e]/60 py-8 px-6">
