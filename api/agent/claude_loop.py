@@ -25,7 +25,9 @@ FALLBACK_MODEL = "openai/gpt-oss-20b"
 
 SYSTEM_PROMPT = """You are an AI agent browsing a website. Complete the assigned task efficiently.
 
-ALWAYS respond with ONLY a JSON object -- no markdown, no explanation, just the JSON:
+Do NOT use any tools or function calls. Output ONLY a raw JSON object, nothing else.
+
+ALWAYS respond with ONLY a JSON object -- no markdown, no explanation, no tool calls, just the JSON:
 {
   "action": "navigate | click | type | scroll | done | failed",
   "target": "CSS selector, exact link/button text, or full URL (for navigate)",
@@ -99,7 +101,7 @@ Decide the next action (respond with JSON only):"""
                     print(f"[llm] rate limited on {model}, waiting {wait}s (attempt {attempt+1}/3)")
                     await asyncio.sleep(wait)
                     continue  # retry same model
-                if any(x in err.lower() for x in ["model_not_found", "404", "does not exist", "decommissioned", "json_validate_failed"]):
+                if any(x in err.lower() for x in ["model_not_found", "404", "does not exist", "decommissioned", "json_validate_failed", "tool_use_failed"]):
                     break  # skip to next model
                 return _error_decision(err)  # unrecoverable
 
