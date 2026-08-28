@@ -1,2 +1,3 @@
 /audit/*  /audit/view/  200
 /report/* /report/view/ 200
+/site/*   /site/view/   200

@@ -9,7 +9,13 @@ Public routes:
   GET  /audits                   List recent audits
   GET  /leaderboard              Top ARS rankings (cached 60 s)
   GET  /compare                  Side-by-side diff for two audits
+  GET  /badge/{audit_id}.svg     Live SVG badge for README embeds
+  GET  /site/{domain}            All audits for a domain (history + trend)
   GET  /health                   Liveness probe
+
+  POST /monitor                  Register a domain for scheduled re-audits
+  GET  /monitor/{domain}         Get monitor config for a domain
+  DELETE /monitor/{monitor_id}   Remove a monitor
 
 Internal routes (X-Worker-Secret required):
   POST /audit/{id}/events        Worker posts a step event
@@ -18,6 +24,7 @@ Internal routes (X-Worker-Secret required):
   POST /internal/audit/{id}/parseability   Parseability job result
   POST /internal/audit/{id}/complete       Aggregate job final result
   POST /internal/audit/{id}/fail           Aggregate job failure
+  POST /internal/monitor/tick              Scheduled monitor sweep
 """
 
 from __future__ import annotations
@@ -35,7 +42,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from . import database as db
 from .cache import cache, cached_json
@@ -313,6 +320,145 @@ async def leaderboard(limit: int = 25):
         }
 
     return await cached_json(f"leaderboard:{limit}", ttl=60, factory=_build)
+
+
+@app.get("/badge/{audit_id}.svg")
+async def badge(audit_id: str):
+    """Live SVG badge for README embeds. Cache 5 min for completed audits."""
+    GRADE_COLORS = {
+        "A+": "#10b981", "A": "#34d399", "B": "#60a5fa",
+        "C": "#fbbf24", "D": "#f97316", "F": "#ef4444",
+    }
+    row = await db.get_audit(audit_id)
+    if not row or not row.get("report"):
+        grade, score, color = "?", "--", "#6b7280"
+    else:
+        report = row["report"] if isinstance(row["report"], dict) else json.loads(row["report"])
+        ars = report.get("ars", {})
+        grade = ars.get("grade", "F")
+        score = str(int(ars.get("composite", 0)))
+        color = GRADE_COLORS.get(grade, "#6b7280")
+
+    label = "AgentProbe ARS"
+    label_w = 110
+    val_w = 52
+    total_w = label_w + val_w
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_w}" height="20">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="{total_w}" height="20" rx="3"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="{label_w}" height="20" fill="#555"/>
+    <rect x="{label_w}" width="{val_w}" height="20" fill="{color}"/>
+    <rect width="{total_w}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="{label_w//2}" y="15" fill="#010101" fill-opacity=".3">{label}</text>
+    <text x="{label_w//2}" y="14">{label}</text>
+    <text x="{label_w + val_w//2}" y="15" fill="#010101" fill-opacity=".3">{grade} {score}</text>
+    <text x="{label_w + val_w//2}" y="14">{grade} {score}</text>
+  </g>
+</svg>"""
+
+    headers = {"Cache-Control": "max-age=300, s-maxage=300"}
+    return Response(content=svg, media_type="image/svg+xml", headers=headers)
+
+
+@app.get("/site/{domain}")
+async def site_history(domain: str, limit: int = 20):
+    """All audits for a domain, newest first. Used for domain history + trend pages."""
+    # Normalize domain
+    domain = domain.lower().lstrip("www.")
+    rows = await db.list_audits(limit=200)
+    matched = []
+    for r in rows:
+        host = (urlparse(r["url"]).hostname or "").lower().lstrip("www.")
+        if host == domain or host.endswith(f".{domain}"):
+            report = None
+            if r.get("report"):
+                rpt = r["report"] if isinstance(r["report"], dict) else json.loads(r["report"])
+                ars = rpt.get("ars", {})
+                report = {
+                    "composite": ars.get("composite", 0),
+                    "grade": ars.get("grade", "F"),
+                    "discoverability": ars.get("discoverability", 0),
+                    "parseability": ars.get("parseability", 0),
+                    "task_completion": ars.get("task_completion", 0),
+                    "friction": ars.get("friction", 0),
+                    "clarity": ars.get("clarity", 0),
+                    "resilience": ars.get("resilience", 0),
+                }
+            matched.append({
+                "audit_id": r["audit_id"],
+                "url": r["url"],
+                "label": r.get("label"),
+                "status": r["status"],
+                "created_at": (
+                    r["created_at"].isoformat()
+                    if hasattr(r.get("created_at"), "isoformat")
+                    else str(r.get("created_at"))
+                ),
+                "ars": report,
+            })
+        if len(matched) >= limit:
+            break
+    return {"domain": domain, "audits": matched}
+
+
+@app.post("/monitor")
+async def create_monitor(body: dict, background: BackgroundTasks):
+    """Register a domain for scheduled monitoring. Fires webhook on ARS drop."""
+    url = _validate_url(body.get("url", ""))
+    webhook_url = body.get("webhook_url", "")
+    threshold_drop = float(body.get("threshold_drop", 5.0))  # alert if ARS drops by this much
+    monitor_id = await db.create_monitor(url=url, webhook_url=webhook_url, threshold_drop=threshold_drop)
+    return {"monitor_id": monitor_id, "url": url, "status": "active"}
+
+
+@app.get("/monitor/{domain}")
+async def get_monitor(domain: str):
+    """Get monitor config for a domain."""
+    monitors = await db.list_monitors(domain=domain)
+    return {"domain": domain, "monitors": monitors}
+
+
+@app.delete("/monitor/{monitor_id}")
+async def delete_monitor(monitor_id: str):
+    """Remove a monitor."""
+    await db.delete_monitor(monitor_id)
+    return {"ok": True}
+
+
+@app.post("/internal/monitor/tick", dependencies=[Depends(verify_worker)])
+async def monitor_tick(background: BackgroundTasks):
+    """Called by the scheduled GitHub Actions workflow. Re-audits all active monitors."""
+    monitors = await db.list_monitors()
+    for m in monitors:
+        background.add_task(_run_monitor_check, m)
+    return {"ok": True, "monitors_checked": len(monitors)}
+
+
+async def _run_monitor_check(monitor: dict) -> None:
+    """Re-audit a monitored URL and fire webhook if ARS dropped enough."""
+    url = monitor["url"]
+    webhook_url = monitor.get("webhook_url", "")
+    threshold_drop = float(monitor.get("threshold_drop", 5.0))
+    last_score = float(monitor.get("last_score") or 0)
+    monitor_id = monitor["monitor_id"]
+
+    # Create a new audit
+    from .models import AuditCreate
+    audit = AuditCreate(url=url, tasks=[t.value for t in TaskName])
+    await db.create_audit(audit_id=audit.audit_id, url=url, tasks=audit.tasks)
+    await _dispatch_worker(audit.audit_id, url, audit.tasks)
+
+    # Update monitor's last_audit_id (score will be updated when audit completes)
+    await db.update_monitor(monitor_id, last_audit_id=audit.audit_id)
+
+    # Webhook fired from complete_audit_and_notify after audit finishes
 
 
 @app.get("/compare")

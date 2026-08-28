@@ -1,0 +1,26 @@
+name: Monitor Sweep
+
+# Runs every 6 hours. Calls the API to re-audit all registered monitors.
+# If ARS drops more than the configured threshold, the API fires the webhook.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:          # manual trigger for testing
+
+jobs:
+  sweep:
+    name: Trigger monitor re-audits
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping monitor tick endpoint
+        env:
+          API_URL: ${{ vars.API_URL || 'https://agentprobe-api.up.railway.app' }}
+          WORKER_SECRET: ${{ secrets.WORKER_SECRET }}
+        run: |
+          curl -sf -X POST "$API_URL/internal/monitor/tick" \
+            -H "X-Worker-Secret: $WORKER_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}'
+          echo "Monitor sweep triggered"

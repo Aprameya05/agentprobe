@@ -1,0 +1,110 @@
+name: AgentProbe ARS Check
+description: >
+  Run an agentic readiness audit on your site and fail the build if the
+  composite ARS score drops below your minimum threshold.
+
+branding:
+  icon: activity
+  color: purple
+
+inputs:
+  url:
+    description: "The site URL to audit (e.g. https://your-site.com)"
+    required: true
+  tasks:
+    description: "Comma-separated task names to run"
+    default: "PRICING_DISCOVERY,CHECKOUT_INITIATION,CONTACT_EXTRACTION,DEMO_BOOKING,POLICY_RETRIEVAL,SUPPORT_ROUTING,API_DISCOVERY"
+  min-ars:
+    description: "Minimum acceptable ARS score (0-100). Build fails if below this."
+    default: "60"
+  api-url:
+    description: "AgentProbe API base URL"
+    default: "https://agentprobe-api.up.railway.app"
+  groq-api-key:
+    description: "Groq API key for the browser agent"
+    required: true
+  timeout-minutes:
+    description: "Max minutes to wait for audit to complete"
+    default: "15"
+
+outputs:
+  audit-id:
+    description: "The audit ID for this run"
+    value: ${{ steps.audit.outputs.audit_id }}
+  ars-score:
+    description: "The composite ARS score (0-100)"
+    value: ${{ steps.wait.outputs.ars_score }}
+  ars-grade:
+    description: "The ARS letter grade (A+ through F)"
+    value: ${{ steps.wait.outputs.ars_grade }}
+  report-url:
+    description: "URL to the full audit report"
+    value: ${{ steps.wait.outputs.report_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Submit audit
+      id: audit
+      shell: bash
+      env:
+        AP_URL: ${{ inputs.url }}
+        AP_TASKS: ${{ inputs.tasks }}
+        AP_API: ${{ inputs.api-url }}
+      run: |
+        TASKS_JSON=$(echo "$AP_TASKS" | python3 -c "
+        import sys, json
+        raw = sys.stdin.read().strip()
+        print(json.dumps([t.strip().upper() for t in raw.split(',') if t.strip()]))
+        ")
+        RESP=$(curl -sf -X POST "$AP_API/audit" \
+          -H "Content-Type: application/json" \
+          -d "{\"url\": \"$AP_URL\", \"tasks\": $TASKS_JSON, \"label\": \"CI check\"}")
+        AUDIT_ID=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['audit_id'])")
+        echo "audit_id=$AUDIT_ID" >> $GITHUB_OUTPUT
+        echo "Submitted audit: $AUDIT_ID"
+
+    - name: Wait for audit to complete
+      id: wait
+      shell: bash
+      env:
+        AP_API: ${{ inputs.api-url }}
+        AP_AUDIT_ID: ${{ steps.audit.outputs.audit_id }}
+        AP_TIMEOUT: ${{ inputs.timeout-minutes }}
+        AP_MIN_ARS: ${{ inputs.min-ars }}
+      run: |
+        DEADLINE=$((SECONDS + AP_TIMEOUT * 60))
+        while [ $SECONDS -lt $DEADLINE ]; do
+          RESP=$(curl -sf "$AP_API/audit/$AP_AUDIT_ID" || echo '{}')
+          STATUS=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','unknown'))" 2>/dev/null)
+          echo "Status: $STATUS"
+          if [ "$STATUS" = "completed" ]; then
+            SCORE=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['report']['ars']['composite'])" 2>/dev/null)
+            GRADE=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['report']['ars']['grade'])" 2>/dev/null)
+            echo "ars_score=$SCORE" >> $GITHUB_OUTPUT
+            echo "ars_grade=$GRADE" >> $GITHUB_OUTPUT
+            echo "report_url=$AP_API/../report/view/?id=$AP_AUDIT_ID" >> $GITHUB_OUTPUT
+            echo ""
+            echo "┌─────────────────────────────────────────┐"
+            echo "│  AgentProbe ARS Result                  │"
+            echo "├─────────────────────────────────────────┤"
+            printf "│  Grade:  %-32s│\n" "$GRADE"
+            printf "│  Score:  %-32s│\n" "$SCORE / 100"
+            printf "│  Min:    %-32s│\n" "$AP_MIN_ARS"
+            echo "└─────────────────────────────────────────┘"
+            # Check threshold
+            PASS=$(python3 -c "print('yes' if float('$SCORE') >= float('$AP_MIN_ARS') else 'no')")
+            if [ "$PASS" = "no" ]; then
+              echo "::error::ARS score $SCORE is below minimum $AP_MIN_ARS (grade $GRADE). Fix agent UX issues before shipping."
+              exit 1
+            fi
+            echo "ARS check passed: $SCORE >= $AP_MIN_ARS"
+            exit 0
+          elif [ "$STATUS" = "failed" ]; then
+            echo "::error::Audit failed to run. Check the AgentProbe dashboard for details."
+            exit 1
+          fi
+          sleep 20
+        done
+        echo "::error::Audit timed out after $AP_TIMEOUT minutes."
+        exit 1

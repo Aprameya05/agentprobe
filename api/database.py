@@ -144,3 +144,77 @@ async def get_events_since(audit_id: str, after_id: int = 0) -> list[dict[str, A
             {"id": r["id"], "created_at": r["created_at"].isoformat(), **json.loads(r["event_json"])}
             for r in rows
         ]
+
+
+# ---------------------------------------------------------------------------
+# Monitors (scheduled re-audit + webhook alerts)
+# ---------------------------------------------------------------------------
+
+async def ensure_monitors_table(conn: asyncpg.Connection) -> None:
+    await conn.execute("""
+        CREATE TABLE IF NOT EXISTS monitors (
+            monitor_id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            webhook_url TEXT DEFAULT '',
+            threshold_drop REAL DEFAULT 5.0,
+            last_score REAL,
+            last_audit_id TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            active BOOLEAN DEFAULT TRUE
+        )
+    """)
+
+
+async def create_monitor(url: str, webhook_url: str = "", threshold_drop: float = 5.0) -> str:
+    import uuid
+    monitor_id = f"mon_{uuid.uuid4().hex[:12]}"
+    async with acquire() as conn:
+        await ensure_monitors_table(conn)
+        await conn.execute(
+            """
+            INSERT INTO monitors (monitor_id, url, webhook_url, threshold_drop)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (monitor_id) DO NOTHING
+            """,
+            monitor_id, url, webhook_url, threshold_drop,
+        )
+    return monitor_id
+
+
+async def list_monitors(domain: Optional[str] = None) -> list[dict[str, Any]]:
+    async with acquire() as conn:
+        await ensure_monitors_table(conn)
+        if domain:
+            rows = await conn.fetch(
+                "SELECT * FROM monitors WHERE active=TRUE AND url ILIKE $1 ORDER BY created_at DESC",
+                f"%{domain}%",
+            )
+        else:
+            rows = await conn.fetch(
+                "SELECT * FROM monitors WHERE active=TRUE ORDER BY created_at DESC",
+            )
+        return [dict(r) for r in rows]
+
+
+async def update_monitor(monitor_id: str, last_audit_id: Optional[str] = None, last_score: Optional[float] = None) -> None:
+    async with acquire() as conn:
+        await ensure_monitors_table(conn)
+        if last_audit_id is not None:
+            await conn.execute(
+                "UPDATE monitors SET last_audit_id=$1 WHERE monitor_id=$2",
+                last_audit_id, monitor_id,
+            )
+        if last_score is not None:
+            await conn.execute(
+                "UPDATE monitors SET last_score=$1 WHERE monitor_id=$2",
+                last_score, monitor_id,
+            )
+
+
+async def delete_monitor(monitor_id: str) -> None:
+    async with acquire() as conn:
+        await ensure_monitors_table(conn)
+        await conn.execute(
+            "UPDATE monitors SET active=FALSE WHERE monitor_id=$1",
+            monitor_id,
+        )

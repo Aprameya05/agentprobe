@@ -63,14 +63,16 @@ async def main() -> None:
 
     ars = compute_ars(task_results, None)
     from api.scoring import generate_recommendations
+    from api.fixcode import enrich_recommendations_with_fixes
     recs = generate_recommendations(ars, task_results, None)
+    recs_with_fixes = await enrich_recommendations_with_fixes(recs, TARGET_URL)
 
     report = {
         "audit_id": AUDIT_ID,
         "url": TARGET_URL,
         "ars": ars.model_dump(mode="json"),
         "tasks": [t.model_dump(mode="json") for t in task_results],
-        "recommendations": [r.model_dump(mode="json") for r in recs],
+        "recommendations": recs_with_fixes,
         "total_steps": sum(t.steps_taken for t in task_results),
         "total_duration_ms": sum(t.duration_ms for t in task_results),
         "parseability_score": parseability_score,

@@ -30,6 +30,7 @@ from ..models import (
     TaskStatus,
 )
 from ..scoring import compute_ars, generate_recommendations
+from ..fixcode import enrich_recommendations_with_fixes
 from .browser import BrowserSession
 from .claude_loop import claude_decide
 from .parseability import analyze_parseability
@@ -92,6 +93,7 @@ async def run_audit_inprocess(
 
         ars = compute_ars(task_results, parseability)
         recs = generate_recommendations(ars, task_results, parseability)
+        recs_with_fixes = await enrich_recommendations_with_fixes(recs, url)
 
         report = {
             "audit_id": audit_id,
@@ -100,7 +102,7 @@ async def run_audit_inprocess(
             "ars": ars.model_dump(mode="json"),
             "parseability": parseability.model_dump(mode="json"),
             "tasks": [t.model_dump(mode="json") for t in task_results],
-            "recommendations": [r.model_dump(mode="json") for r in recs],
+            "recommendations": recs_with_fixes,
             "total_steps": sum(t.steps_taken for t in task_results),
             "total_duration_ms": sum(t.duration_ms for t in task_results),
             "industry_vs": {

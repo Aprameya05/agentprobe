@@ -52,6 +52,155 @@ function DimBar({ label, score, baseline }: { label: string; score: number; base
   );
 }
 
+// ─── Agent Replay ────────────────────────────────────────────────────────────
+
+const ACTION_STYLE: Record<string, { label: string; color: string; bg: string }> = {
+  navigate: { label: "NAV",    color: "#a855f7", bg: "#a855f710" },
+  click:    { label: "CLICK",  color: "#60a5fa", bg: "#60a5fa10" },
+  type:     { label: "TYPE",   color: "#34d399", bg: "#34d39910" },
+  scroll:   { label: "SCROLL", color: "#6b7280", bg: "#6b728010" },
+  done:     { label: "DONE",   color: "#10b981", bg: "#10b98120" },
+  failed:   { label: "FAIL",   color: "#ef4444", bg: "#ef444420" },
+  wait:     { label: "WAIT",   color: "#6b7280", bg: "#6b728010" },
+};
+
+function AgentReplay({ tasks }: { tasks: any[] }) {
+  const [selectedTask, setSelectedTask] = useState(0);
+  const [playIdx, setPlayIdx] = useState(-1);
+  const [playing, setPlaying] = useState(false);
+
+  const task = tasks[selectedTask];
+  const steps = task?.steps ?? [];
+
+  useEffect(() => {
+    setPlayIdx(-1);
+    setPlaying(false);
+  }, [selectedTask]);
+
+  useEffect(() => {
+    if (!playing) return;
+    if (playIdx >= steps.length - 1) { setPlaying(false); return; }
+    const t = setTimeout(() => setPlayIdx(i => i + 1), 600);
+    return () => clearTimeout(t);
+  }, [playing, playIdx, steps.length]);
+
+  function startReplay() {
+    setPlayIdx(-1);
+    setPlaying(false);
+    setTimeout(() => { setPlayIdx(0); setPlaying(true); }, 50);
+  }
+
+  const visibleSteps = playIdx < 0 ? steps : steps.slice(0, playIdx + 1);
+
+  return (
+    <div className="bg-[#111118] border border-[#1e1e2e] rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-5 py-3 bg-[#0d0d14] border-b border-[#1e1e2e]">
+        <span className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+        <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+        <span className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+        <span className="ml-2 text-[11px] text-gray-500 font-mono">agent replay</span>
+        <div className="ml-auto flex items-center gap-2">
+          {playing && (
+            <span className="flex items-center gap-1 text-[10px] text-indigo-400 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+              running step {playIdx + 1}/{steps.length}
+            </span>
+          )}
+          <button
+            onClick={startReplay}
+            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-mono rounded transition-colors"
+          >
+            ▶ replay
+          </button>
+        </div>
+      </div>
+
+      {/* Task selector */}
+      <div className="flex gap-1 px-4 pt-3 pb-0 overflow-x-auto">
+        {tasks.map((t: any, i: number) => (
+          <button
+            key={i}
+            onClick={() => setSelectedTask(i)}
+            className={`px-3 py-1.5 rounded-t-lg text-[10px] font-mono whitespace-nowrap transition-all border-b-2 ${
+              i === selectedTask
+                ? "text-white border-indigo-500 bg-indigo-500/10"
+                : "text-gray-600 border-transparent hover:text-gray-400"
+            }`}
+          >
+            {t.task_name?.toLowerCase().replace(/_/g, " ")}
+            <span className={`ml-1.5 ${t.status === "completed" ? "text-green-500" : "text-red-500"}`}>
+              {t.status === "completed" ? "✓" : "✗"}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Step feed */}
+      <div className="px-4 py-3 h-64 overflow-y-auto space-y-1.5 font-mono text-xs">
+        {visibleSteps.length === 0 && (
+          <p className="text-gray-600 text-center mt-8">Press ▶ replay to watch the agent</p>
+        )}
+        {visibleSteps.map((step: any, i: number) => {
+          const style = ACTION_STYLE[step.action] ?? ACTION_STYLE.navigate;
+          const isLatest = i === visibleSteps.length - 1 && playing;
+          return (
+            <motion.div
+              key={step.step_index}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`flex items-start gap-2 p-2 rounded-lg transition-colors ${
+                isLatest ? "bg-indigo-500/10 border border-indigo-500/20" : ""
+              }`}
+            >
+              <span className="text-gray-600 w-5 text-right shrink-0">{step.step_index + 1}</span>
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase shrink-0"
+                style={{ color: style.color, background: style.bg }}
+              >
+                {style.label}
+              </span>
+              <span className="flex-1 text-gray-300 leading-relaxed">{step.reasoning}</span>
+              {step.target && (
+                <span className="text-gray-600 max-w-[120px] truncate shrink-0" title={step.target}>
+                  → {step.target}
+                </span>
+              )}
+              <span className={`text-[10px] shrink-0 ${
+                step.confidence >= 0.7 ? "text-green-600" :
+                step.confidence >= 0.4 ? "text-amber-600" : "text-red-600"
+              }`}>{(step.confidence * 100).toFixed(0)}%</span>
+              {step.friction_note && (
+                <span className="text-amber-400 text-[10px] shrink-0">⚠</span>
+              )}
+            </motion.div>
+          );
+        })}
+        {!playing && steps.length > 0 && playIdx === steps.length - 1 && (
+          <div className={`text-center text-[10px] font-mono py-2 ${
+            task.status === "completed" ? "text-green-400" : "text-red-400"
+          }`}>
+            {task.status === "completed" ? "✓ Task completed" : `✗ ${task.failure_point || "Task failed"}`}
+          </div>
+        )}
+      </div>
+
+      {/* Stats bar */}
+      {steps.length > 0 && (
+        <div className="border-t border-[#1e1e2e] px-5 py-2.5 flex gap-6 text-[10px] font-mono text-gray-600 bg-[#0d0d14]">
+          <span>{steps.length} steps</span>
+          <span>{((task.duration_ms ?? 0) / 1000).toFixed(1)}s</span>
+          <span>avg conf {((task.avg_confidence ?? 0) * 100).toFixed(0)}%</span>
+          {task.walls_hit > 0 && <span className="text-amber-500">{task.walls_hit} wall(s)</span>}
+          {task.backtracks > 0 && <span className="text-orange-500">{task.backtracks} backtrack(s)</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Task Card ───────────────────────────────────────────────────────────────
+
 function TaskCard({ task }: { task: any }) {
   const [open, setOpen] = useState(false);
   const done = task.status === "completed";
@@ -255,8 +404,8 @@ export default function ReportPage() {
                     : "border-[#1e1e2e] bg-[#111118]"
                 }`}
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs font-mono font-bold uppercase ${
                         r.severity === "critical" ? "text-red-400" :
@@ -272,8 +421,29 @@ export default function ReportPage() {
                     <p className="text-green-400 font-bold font-mono">+{r.estimated_impact}</p>
                   </div>
                 </div>
+                {r.fix_code && (
+                  <div className="relative">
+                    <pre className="bg-[#0d0d14] border border-[#2a2a3a] rounded-lg p-3 text-xs font-mono text-gray-300 overflow-x-auto leading-relaxed whitespace-pre-wrap">
+                      {r.fix_code}
+                    </pre>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(r.fix_code)}
+                      className="absolute top-2 right-2 px-2 py-0.5 bg-[#1e1e2e] hover:bg-indigo-600 text-[9px] text-gray-500 hover:text-white font-mono rounded transition-all"
+                    >
+                      copy
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))}
+          </div>
+        )}
+
+        {/* Agent replay */}
+        {report.tasks?.length > 0 && (
+          <div>
+            <h2 className="text-sm font-mono text-gray-400 mb-3">Agent replay</h2>
+            <AgentReplay tasks={report.tasks} />
           </div>
         )}
 
@@ -352,6 +522,46 @@ export default function ReportPage() {
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white transition-all font-semibold"
           >
             Export JSON
+          </button>
+          {(() => {
+            try {
+              const domain = new URL(report.url).hostname.replace(/^www\./, "");
+              return (
+                <a
+                  href={`/site/${domain}`}
+                  className="px-4 py-2 bg-[#111118] border border-[#1e1e2e] rounded-lg text-sm text-gray-300 hover:border-indigo-500 hover:text-white transition-all font-mono"
+                >
+                  📈 Site history
+                </a>
+              );
+            } catch { return null; }
+          })()}
+        </div>
+
+        {/* Badge embed */}
+        <div className="bg-[#111118] border border-[#1e1e2e] rounded-xl p-5">
+          <h2 className="text-sm font-mono text-gray-400 mb-3">README badge</h2>
+          <div className="flex items-center gap-3 mb-3">
+            {/* Live badge preview */}
+            <img
+              src={`${API}/badge/${id}.svg`}
+              alt="ARS badge"
+              className="h-5"
+              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+            <span className="text-xs text-gray-600 font-mono">live • updates when you re-run</span>
+          </div>
+          <div className="bg-[#0d0d14] rounded-lg p-3 font-mono text-xs text-gray-300 overflow-x-auto">
+            <p className="text-gray-600 mb-1"># Markdown</p>
+            <p className="select-all break-all">
+              {`![AgentProbe ARS](${API}/badge/${id}.svg)`}
+            </p>
+          </div>
+          <button
+            onClick={() => navigator.clipboard.writeText(`![AgentProbe ARS](${API}/badge/${id}.svg)`)}
+            className="mt-2 text-[10px] text-gray-500 hover:text-indigo-400 font-mono transition-colors"
+          >
+            Copy badge markdown
           </button>
         </div>
       </div>
