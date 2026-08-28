@@ -256,6 +256,7 @@ async def run_task(
                 "status": "completed",
                 "steps_taken": len(steps),
                 "duration_ms": duration,
+                "task_result": result.model_dump(mode="json"),
             })
             return result
 
@@ -278,6 +279,7 @@ async def run_task(
                 "status": "failed",
                 "failure_point": decision.get("reasoning"),
                 "steps_taken": len(steps),
+                "task_result": result.model_dump(mode="json"),
             })
             return result
 
@@ -315,6 +317,7 @@ async def run_task(
         "status": "failed",
         "failure_point": "timeout",
         "steps_taken": len(steps),
+        "task_result": result.model_dump(mode="json"),
     })
     return result
 
