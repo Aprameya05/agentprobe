@@ -39,7 +39,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install playwright beautifulsoup4 lxml httpx
+      - run: pip install playwright beautifulsoup4 lxml httpx pydantic groq
       - run: playwright install --with-deps chromium
 
       - name: Run parseability analysis
@@ -70,7 +70,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install playwright groq httpx pydantic
+      - run: pip install playwright groq httpx pydantic beautifulsoup4 lxml
       - run: playwright install --with-deps chromium
 
       - name: Run task
