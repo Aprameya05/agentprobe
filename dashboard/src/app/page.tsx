@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -97,13 +96,14 @@ function AgentTerminal() {
     let i = 0;
     const interval = setInterval(() => {
       if (i < DEMO_LOG.length) {
-        setVisible(prev => [...prev, i]);
+        const idx = i;          // capture before any async batching changes i
         i++;
+        setVisible(prev => [...prev, idx]);
         if (containerRef.current) {
           containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-      } else {
-        // Reset
+      } else if (i === DEMO_LOG.length) {
+        i++;                    // sentinel: only schedule one reset
         setTimeout(() => { setVisible([]); i = 0; }, 2000);
       }
     }, 700);
@@ -182,7 +182,6 @@ function AgentTerminal() {
 }
 
 export default function HomePage() {
-  const router = useRouter();
   const [url, setUrl]         = useState("");
   const [label, setLabel]     = useState("");
   const [tasks, setTasks]     = useState<string[]>(TASKS.map(t => t.id));
@@ -208,7 +207,7 @@ export default function HomePage() {
       });
       if (!r.ok) throw new Error(`API error: ${r.status}`);
       const { audit_id } = await r.json();
-      router.push(`/audit/${audit_id}`);
+      window.location.href = `/audit/${audit_id}`;
     } catch (e: any) {
       setError(e.message);
       setLoading(false);
