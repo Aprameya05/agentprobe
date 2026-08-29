@@ -14,7 +14,7 @@ clicking through your site right now, and most of them are silently giving up. S
 built a whole industry around Google being the visitor. AgentProbe does the same thing for
 the new visitor.
 
-Point it at a URL. A real Llama 3.3-70b agent navigates the site and attempts seven tasks:
+Point it at a URL. A real GPT-OSS-120b agent navigates the site and attempts seven tasks:
 finding pricing, initiating checkout, extracting contact info, booking a demo, retrieving
 your refund policy, routing to support, and reaching API docs. Every click, every decision,
 every dead end is recorded. You get a scored report with exactly where the agent failed and
@@ -112,8 +112,8 @@ SUPPORT_ROUTING       Reach a support ticket form or help center.
 API_DISCOVERY         Reach API reference docs or a developer portal.
 ```
 
-Each task runs up to 15 steps. The agent uses Llama 3.3-70b-versatile via Groq (free tier)
-and falls back to llama-3.1-8b-instant if the primary model is rate-limited.
+Each task runs up to 15 steps. The agent uses openai/gpt-oss-120b via Groq (free tier)
+and falls back to openai/gpt-oss-20b if the primary model is rate-limited.
 
 ---
 
@@ -170,7 +170,7 @@ User submits URL
 |---|---|---|
 | API | Render | 512 MB, sleeps after 15 min (UptimeRobot keepalive) |
 | Browser compute | GitHub Actions | 2000 min/month public repo, parallel matrix |
-| LLM | Groq | 14,400 req/day, llama-3.3-70b-versatile |
+| LLM | Groq | 14,400 req/day, openai/gpt-oss-120b |
 | Database | Neon Postgres | 0.5 GB, 1 project |
 | Dashboard | Cloudflare Pages | Unlimited bandwidth, global CDN |
 | Keepalive | UptimeRobot | 50 monitors, 5-min interval |
@@ -326,7 +326,7 @@ agentprobe/
 |
 +-- .github/workflows/
 |   +-- ci.yml               Import checks on every push (< 30 seconds)
-|   +-- audit-worker.yml     Parallel task matrix triggered by API dispatch
+|   +-- audit-worker.yml     Sequential task matrix triggered by API dispatch
 |
 +-- infra/
 |   +-- schema.sql           Neon Postgres schema (audits + audit_events)
